@@ -147,6 +147,10 @@ public class WavPlayer {
         saveMenuItem.addActionListener(e -> saveToFile());
         fileMenu.add(saveMenuItem);
 
+        JMenuItem exportMenuItem = new JMenuItem("Export");
+        exportMenuItem.addActionListener(e -> exportToJson());
+        fileMenu.add(exportMenuItem);
+
         menuBar.add(fileMenu);
         frame.setJMenuBar(menuBar);
 
@@ -227,6 +231,69 @@ public class WavPlayer {
         frame.setVisible(true);
     }
 
+    private static String escapeJsonString(String input) {
+        StringBuilder output = new StringBuilder();
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            if (c == '"' || c == '\\' || c == '/') {
+                output.append('\\');
+            }
+            output.append(c);
+        }
+        return output.toString();
+    }
+
+    private static void exportToJson() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Export to JSON");
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+
+        // Set default file name to the opened folder's name with a .json extension
+        if (currentFolder != null) {
+            String defaultFileName = currentFolder.getName() + ".json";
+            fileChooser.setSelectedFile(new File(defaultFileName));
+        }
+
+        int result = fileChooser.showSaveDialog(null);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File fileToSave = fileChooser.getSelectedFile();
+
+            try (FileWriter writer = new FileWriter(fileToSave)) {
+                StringBuilder jsonString = new StringBuilder();
+                jsonString.append("{\n");
+                jsonString.append("  \"folderPath\": \"").append(escapeJsonString(currentFolder.getAbsolutePath())).append("\",\n");
+                jsonString.append("  \"files\": [\n");
+
+                for (int i = 0; i < wavFiles.size(); i++) {
+                    String fileName = escapeJsonString(wavFiles.get(i).getName());
+                    double gain = gains[i];
+                    jsonString.append("    {\n");
+                    jsonString.append("      \"fileName\": \"").append(fileName).append("\",\n");
+                    jsonString.append("      \"gain\": ").append(new DecimalFormat("#.##").format(gain)).append("\n");
+                    jsonString.append("    }");
+
+                    if (i < wavFiles.size() - 1) {
+                        jsonString.append(",\n");
+                    } else {
+                        jsonString.append("\n");
+                    }
+                }
+
+                jsonString.append("  ]\n");
+                jsonString.append("}");
+
+                writer.write(jsonString.toString());
+
+            } catch (IOException e) {
+                e.printStackTrace();
+
+                // Show an error message dialog
+                JOptionPane.showMessageDialog(null, "An error occurred while exporting to JSON. Please try again.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+
     private static JTable createWavTable() {
 
         CustomTableModel model = createTableModel();
@@ -282,7 +349,6 @@ public class WavPlayer {
                         ex.printStackTrace();
                     }
                 }
-//                    gainChangedByKey = false;
                 manualNavigation = false;
                 pausePressed = false;
                 mouseClicked = false;
@@ -335,7 +401,6 @@ public class WavPlayer {
 
     private static void changeGain(double delta) {
         gains[currentPlayingIndex] += delta;
-//        gainChangedByKey = true;
         applyGain();
         wavTable.setValueAt(new DecimalFormat("#.#").format(gains[currentPlayingIndex]), currentPlayingIndex, 1);
     }
