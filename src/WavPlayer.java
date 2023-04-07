@@ -1,5 +1,6 @@
 import javax.sound.sampled.*;
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
@@ -8,6 +9,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
@@ -15,6 +17,9 @@ import java.util.Collections;
 import java.util.List;
 import javax.swing.JFileChooser;
 import javax.sound.sampled.SourceDataLine;
+import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class WavPlayer {
     private static List<File> wavFiles;
@@ -147,6 +152,10 @@ public class WavPlayer {
         saveMenuItem.addActionListener(e -> saveToFile());
         fileMenu.add(saveMenuItem);
 
+        JMenuItem importMenuItem = new JMenuItem("Import");
+        importMenuItem.addActionListener(e -> importFromJson());
+        fileMenu.add(importMenuItem);
+
         JMenuItem exportMenuItem = new JMenuItem("Export");
         exportMenuItem.addActionListener(e -> exportToJson());
         fileMenu.add(exportMenuItem);
@@ -231,6 +240,37 @@ public class WavPlayer {
         frame.setVisible(true);
     }
 
+    private static String unescapeJsonString(String input) {
+        StringBuilder output = new StringBuilder();
+        boolean escaped = false;
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            if (escaped) {
+                if (c == '"' || c == '\\' || c == '/') {
+                    output.append(c);
+                } else if (c == 'b') {
+                    output.append('\b');
+                } else if (c == 'f') {
+                    output.append('\f');
+                } else if (c == 'n') {
+                    output.append('\n');
+                } else if (c == 'r') {
+                    output.append('\r');
+                } else if (c == 't') {
+                    output.append('\t');
+                } else {
+                    output.append('\\').append(c);
+                }
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else {
+                output.append(c);
+            }
+        }
+        return output.toString();
+    }
+
     private static String escapeJsonString(String input) {
         StringBuilder output = new StringBuilder();
         for (int i = 0; i < input.length(); i++) {
@@ -241,6 +281,66 @@ public class WavPlayer {
             output.append(c);
         }
         return output.toString();
+    }
+
+    public static void importFromJson() {
+        Component parent = null;
+        JFileChooser fileChooser = new JFileChooser();
+        FileNameExtensionFilter filter = new FileNameExtensionFilter("JSON Files", "json");
+        fileChooser.setFileFilter(filter);
+
+        int returnValue = fileChooser.showOpenDialog(parent);
+        if (returnValue == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+
+            try {
+                String jsonString = new String(Files.readAllBytes(selectedFile.toPath()));
+                Pattern folderPathPattern = Pattern.compile("\"folderPath\"\\s*:\\s*\"(.*?)\"");
+                Matcher folderPathMatcher = folderPathPattern.matcher(jsonString);
+                if (folderPathMatcher.find()) {
+                    String folderPath = unescapeJsonString(folderPathMatcher.group(1));
+
+                    Path folderPathObj = Paths.get(folderPath);
+                    wavFiles = loadWavFiles(folderPathObj.toString());
+                    gains = new double[wavFiles.size()];
+                    wavTable.setModel(createTableModel());
+
+                    // Set custom cell renderer
+                    CustomTableCellRenderer customRenderer = new CustomTableCellRenderer();
+                    for (int i = 0; i < wavTable.getColumnCount(); i++) {
+                        wavTable.getColumnModel().getColumn(i).setCellRenderer(customRenderer);
+                    }
+
+                    shuffleTable();
+                }
+
+                Pattern filesPattern = Pattern.compile("\"files\"\\s*:\\s*\\[(.*?)\\]", Pattern.DOTALL);
+                Matcher filesMatcher = filesPattern.matcher(jsonString);
+                if (filesMatcher.find()) {
+                    String filesArray = filesMatcher.group(1);
+                    Pattern filePattern = Pattern.compile("\\{\\s*\"fileName\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"Gain\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)\\s*\\}");
+
+                    Matcher fileMatcher = filePattern.matcher(filesArray);
+
+                    DefaultTableModel tableModel = (DefaultTableModel) wavTable.getModel();
+                    while (fileMatcher.find()) {
+                        String name = unescapeJsonString(fileMatcher.group(1));
+                        double gain = Double.parseDouble(fileMatcher.group(2));
+                        for (int i = 0; i < tableModel.getRowCount(); i++) {
+                            if (name.equals(tableModel.getValueAt(i, 0))) {
+                                tableModel.setValueAt(gain, i, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                wavTable.repaint();
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private static void exportToJson() {
@@ -269,7 +369,7 @@ public class WavPlayer {
                     double gain = gains[i];
                     jsonString.append("    {\n");
                     jsonString.append("      \"fileName\": \"").append(fileName).append("\",\n");
-                    jsonString.append("      \"gain\": ").append(new DecimalFormat("#.##").format(gain)).append("\n");
+                    jsonString.append("      \"Gain\": ").append(new DecimalFormat("#.##").format(gain)).append("\n");
                     jsonString.append("    }");
 
                     if (i < wavFiles.size() - 1) {
