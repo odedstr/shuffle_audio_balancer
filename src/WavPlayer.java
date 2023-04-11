@@ -12,12 +12,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.DecimalFormat;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import javax.swing.JFileChooser;
 import javax.sound.sampled.SourceDataLine;
-import java.util.Scanner;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -167,14 +165,32 @@ public class WavPlayer {
         wavTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+
+//                if(disableControls)
+//                    return;
+
                 int row = wavTable.getSelectedRow();
                 if (row >= 0) {
                     currentPlayingIndex = row;
                     mouseClicked = true;
                     try {
-                        if (currentLine != null && currentLine.isRunning()) {
+                        if (currentLine != null ){//&& currentLine.isRunning()) {
                             currentLine.stop();
+                            currentLine.close();
                         }
+//                       if(currentLine != null) {
+//                            currentLine.stop();
+//                            currentLine.close();
+//                        }
+
+//                        for (Thread thread : threads) {
+//                            thread.interrupt();
+//                        }
+//
+//                        if(playbackThread != null) {
+//                            playbackThread.interrupt();
+//                        }
+
                         playWav(currentPlayingIndex);
                     } catch (UnsupportedAudioFileException | IOException | LineUnavailableException ex) {
                         ex.printStackTrace();
@@ -195,6 +211,17 @@ public class WavPlayer {
 
                             try {
                                 switch (e.getKeyCode()) {
+
+                                    case KeyEvent.VK_Q:
+                                        manualNavigation = false;
+//                                        if(currentLine != null) {
+//                                            currentLine.stop();
+//                                            currentLine.close();
+//                                        }
+//                                        if(playbackThread != null) {
+//                                            playbackThread.interrupt();
+//                                        }
+                                        break;
 
                                     case KeyEvent.VK_SPACE:
                                         if (currentLine == null) {
@@ -409,6 +436,12 @@ public class WavPlayer {
         return table;
     }
 
+//    static Thread playbackThread;
+
+//    static Vector<Thread> threads = new Vector<>();
+    static boolean disableControls = false;
+
+
     private static void playWav(int index) throws UnsupportedAudioFileException, IOException, LineUnavailableException {
         if (currentLine != null) {
             currentLine.stop();
@@ -422,19 +455,35 @@ public class WavPlayer {
         currentLine.open(format);
 
         currentPlayingIndex = index;
-        applyGain();
         currentLine.start();
+        try {
+            applyGain();
+        }
+        catch (Exception e){
+            System.out.println(e.getMessage());
+            return;
+        }
         wavTable.repaint();
 
+//        if(playbackThread != null) {
+////            playbackThread.interrupt();
+//            return;
+//        }
+//        playbackThread.stop();
+
         Thread playbackThread = new Thread(() -> {
-            byte[] buffer = new byte[4096];
+//            byte[] buffer = new byte[4096];
+            byte[] buffer = new byte[8192];
+
             int bytesRead = 0;
             try {
+                disableControls = true;
                 while ((bytesRead = audioInputStream.read(buffer, 0, buffer.length)) != -1) {
                     currentLine.write(buffer, 0, bytesRead);
                 }
                 currentLine.drain();
                 audioInputStream.close();
+                disableControls = false;
 
                 if (!mouseClicked && !manualNavigation && !pausePressed) {
                     try {
@@ -459,6 +508,7 @@ public class WavPlayer {
         });
 
         playbackThread.start();
+//        threads.add(playbackThread);
     }
 
     private static void shuffleTable() {
@@ -486,6 +536,11 @@ public class WavPlayer {
     private static void nextWav() throws UnsupportedAudioFileException, IOException, LineUnavailableException {
         if (currentPlayingIndex < wavFiles.size() - 1) {
             currentPlayingIndex++;
+
+//            if(playbackThread != null) {
+//                playbackThread.interrupt();
+//            }
+
             playWav(currentPlayingIndex);
             wavTable.setRowSelectionInterval(currentPlayingIndex, currentPlayingIndex);
         }
@@ -506,15 +561,16 @@ public class WavPlayer {
     }
 
     private static void applyGain() {
+        //&& currentLine.isRunning()
         if (currentLine != null) {
-            try {
+//            try {
                 FloatControl gainControl = (FloatControl) currentLine.getControl(FloatControl.Type.MASTER_GAIN);
                 float gainValue = (float) gains[currentPlayingIndex];
                 float dB = (Math.min(gainControl.getMaximum(), Math.max(gainControl.getMinimum(), gainValue)));
                 gainControl.setValue(dB);
-            } catch (IllegalArgumentException ex) {
-                ex.printStackTrace();
-            }
+//            } catch (IllegalArgumentException ex) {
+//                ex.printStackTrace();
+//            }
         }
     }
 
