@@ -472,8 +472,8 @@ public class WavPlayer {
 //        playbackThread.stop();
 
         Thread playbackThread = new Thread(() -> {
-//            byte[] buffer = new byte[4096];
-            byte[] buffer = new byte[8192];
+            byte[] buffer = new byte[4096];
+//            byte[] buffer = new byte[8192];
 
             int bytesRead = 0;
             try {
