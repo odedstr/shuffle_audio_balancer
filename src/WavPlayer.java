@@ -436,13 +436,18 @@ public class WavPlayer {
         return table;
     }
 
-//    static Thread playbackThread;
+    static Thread playbackThread;
 
 //    static Vector<Thread> threads = new Vector<>();
     static boolean disableControls = false;
 
+//    static boolean stopPlaying = false;
+
+    static Thread toStopThread = null;
 
     private static void playWav(int index) throws UnsupportedAudioFileException, IOException, LineUnavailableException {
+//        stopPlaying = true;
+        toStopThread = playbackThread;
         if (currentLine != null) {
             currentLine.stop();
             currentLine.close();
@@ -471,22 +476,33 @@ public class WavPlayer {
 //        }
 //        playbackThread.stop();
 
-        Thread playbackThread = new Thread(() -> {
+        playbackThread = new Thread(() -> {
             byte[] buffer = new byte[4096];
 //            byte[] buffer = new byte[8192];
 
             int bytesRead = 0;
             try {
-                disableControls = true;
-                while ((bytesRead = audioInputStream.read(buffer, 0, buffer.length)) != -1) {
-                    currentLine.write(buffer, 0, bytesRead);
-                }
-                currentLine.drain();
-                audioInputStream.close();
-                disableControls = false;
+//                disableControls = true;
+//                synchronized (wavTable) {
+//                    stopPlaying = false;
+                    while ((bytesRead = audioInputStream.read(buffer, 0, buffer.length)) != -1) {
 
-                if (!mouseClicked && !manualNavigation && !pausePressed) {
-                    try {
+                        if(toStopThread != null && toStopThread == playbackThread){
+                            break;
+                        }
+
+                        currentLine.write(buffer, 0, bytesRead);
+                    }
+//                    stopPlaying = false;
+                    currentLine.drain();
+                    audioInputStream.close();
+//                }
+//                disableControls = false;
+
+//                if (!mouseClicked && !manualNavigation && !pausePressed) {
+                    if (!mouseClicked && !manualNavigation && !pausePressed) {
+
+                        try {
                         if (currentPlayingIndex < wavFiles.size() - 1) {
                             nextWav();
                         } else {
